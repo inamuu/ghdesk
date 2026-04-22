@@ -4,6 +4,14 @@ GitHub の PR / Issue をターミナル全画面で横断する TUI です。
 
 検索はバックグラウンドで実行されるため、カテゴリ切替やフィルタ変更中も UI が止まりにくくなっています。
 
+## Homebrew
+
+タグ `v*` を push すると GitHub Actions が release asset を作成し、`inamuu/homebrew-tap` の Formula を更新します。
+
+```bash
+brew install inamuu/tap/ghdesk
+```
+
 ## 機能
 
 - `私が作成したPR`

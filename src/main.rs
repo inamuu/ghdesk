@@ -24,10 +24,36 @@ const PAGE_SIZE: usize = 20;
 const HELP_TEXT: &str = "Tab/Shift+Tab:カテゴリ  j/k,↑/↓:移動  n:PR作成  e:クエリ編集  a:organization  s:状態切替  r:更新  Enter/o:ブラウザ  </>:コピー  Esc/Ctrl+C/Cmd+W/q:終了";
 
 fn main() -> Result<()> {
+    if handle_cli_args()? {
+        return Ok(());
+    }
+
     let terminal = setup_terminal()?;
     let result = run_app(terminal);
     restore_terminal()?;
     result
+}
+
+fn handle_cli_args() -> Result<bool> {
+    let mut args = std::env::args().skip(1);
+    let Some(arg) = args.next() else {
+        return Ok(false);
+    };
+
+    match arg.as_str() {
+        "--version" | "-V" => {
+            println!("ghdesk {}", env!("CARGO_PKG_VERSION"));
+            Ok(true)
+        }
+        "--help" | "-h" => {
+            println!(
+                "ghdesk {}\n\nUSAGE:\n  ghdesk\n  ghdesk --help\n  ghdesk --version\n\nOPTIONS:\n  -h, --help       Show this help\n  -V, --version    Show version",
+                env!("CARGO_PKG_VERSION")
+            );
+            Ok(true)
+        }
+        other => Err(anyhow!("unknown argument: {other}")),
+    }
 }
 
 fn setup_terminal() -> Result<DefaultTerminal> {
