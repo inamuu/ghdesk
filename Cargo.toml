@@ -1,0 +1,13 @@
+[package]
+name = "ghdesk"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0"
+arboard = "3.6"
+crossterm = "0.29"
+pulldown-cmark = "0.13"
+ratatui = "0.29"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
