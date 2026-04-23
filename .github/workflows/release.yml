@@ -19,15 +19,19 @@ jobs:
           - runner: ubuntu-24.04
             os: linux
             arch: amd64
+            target: x86_64-unknown-linux-gnu
           - runner: ubuntu-24.04-arm
             os: linux
             arch: arm64
-          - runner: macos-13
+            target: aarch64-unknown-linux-gnu
+          - runner: macos-14
             os: darwin
             arch: amd64
+            target: x86_64-apple-darwin
           - runner: macos-14
             os: darwin
             arch: arm64
+            target: aarch64-apple-darwin
 
     steps:
       - name: Checkout
@@ -37,12 +41,16 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Cache Cargo
         uses: swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
 
       - name: Build release binary
-        run: cargo build --release --locked
+        run: cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Package archive
         shell: bash
@@ -51,7 +59,7 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           archive="ghdesk_${version}_${{ matrix.os }}_${{ matrix.arch }}.tar.gz"
           mkdir -p dist
-          cp target/release/ghdesk dist/ghdesk
+          cp target/${{ matrix.target }}/release/ghdesk dist/ghdesk
           tar -C dist -czf "$archive" ghdesk
           shasum -a 256 "$archive" > "${archive}.sha256"
 
