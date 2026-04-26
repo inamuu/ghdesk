@@ -21,7 +21,7 @@ use ratatui::{DefaultTerminal, Frame};
 use serde::Deserialize;
 
 const PAGE_SIZE: usize = 20;
-const HELP_TEXT: &str = "Tab/Shift+Tab:カテゴリ  j/k,↑/↓:移動  n:PR作成  e:クエリ編集  a:organization  s:状態切替  r:更新  Enter/o:ブラウザ  </>:コピー  Esc/Ctrl+C/Cmd+W/q:終了";
+const HELP_TEXT: &str = "Tab/Shift+Tab:カテゴリ  j/k,↑/↓:移動  n:PR作成  e:クエリ編集  a:organization  s:状態切替  r:更新  Shift+R:強制更新  Enter/o:ブラウザ  </>:コピー  Esc/Ctrl+C/Cmd+W/q:終了";
 
 fn main() -> Result<()> {
     if handle_cli_args()? {
@@ -287,6 +287,7 @@ struct GithubItem {
 struct FetchRequest {
     id: u64,
     query: String,
+    force_refresh: bool,
 }
 
 struct FetchResponse {
@@ -298,7 +299,8 @@ struct FetchResponse {
 fn spawn_fetch_worker(fetch_rx: Receiver<FetchRequest>, result_tx: Sender<FetchResponse>) {
     thread::spawn(move || {
         while let Ok(request) = fetch_rx.recv() {
-            let result = fetch_items(&request.query).map_err(|err| err.to_string());
+            let result =
+                fetch_items(&request.query, request.force_refresh).map_err(|err| err.to_string());
             let _ = result_tx.send(FetchResponse {
                 id: request.id,
                 query: request.query,
@@ -744,6 +746,7 @@ impl App {
                 self.refresh()?;
             }
             KeyCode::Char('r') => self.refresh()?,
+            KeyCode::Char('R') => self.force_refresh()?,
             KeyCode::Enter | KeyCode::Char('o') => self.open_selected_in_browser()?,
             KeyCode::Char('<') | KeyCode::Char(',') if is_copy_url_shortcut(key) => {
                 self.copy_selected_url()?;
@@ -865,6 +868,14 @@ impl App {
     }
 
     fn refresh(&mut self) -> Result<()> {
+        self.request_fetch(false)
+    }
+
+    fn force_refresh(&mut self) -> Result<()> {
+        self.request_fetch(true)
+    }
+
+    fn request_fetch(&mut self, force_refresh: bool) -> Result<()> {
         let search_query = self.category.search_query(
             self.state_filter,
             (!self.organization.is_empty()).then_some(self.organization.as_str()),
@@ -873,12 +884,17 @@ impl App {
         self.request_id += 1;
         self.active_request_id = Some(self.request_id);
         self.loading = true;
-        self.status = "GitHub から取得中…".to_string();
+        self.status = if force_refresh {
+            "キャッシュを使わず GitHub から取得中…".to_string()
+        } else {
+            "GitHub から取得中…".to_string()
+        };
         self.last_query = search_query.clone();
         self.fetch_tx
             .send(FetchRequest {
                 id: self.request_id,
                 query: search_query,
+                force_refresh,
             })
             .map_err(|_| anyhow!("検索ワーカーへリクエストを送信できませんでした"))?;
         Ok(())
@@ -989,14 +1005,16 @@ impl App {
 
 fn is_copy_url_shortcut(key: KeyEvent) -> bool {
     matches!(key.code, KeyCode::Char('<'))
-        || (matches!(key.code, KeyCode::Char(',')) && key.modifiers.contains(KeyModifiers::SHIFT))
-        || (matches!(key.code, KeyCode::Char(',')) && key.modifiers.contains(KeyModifiers::SUPER))
+        || (matches!(key.code, KeyCode::Char(','))
+            && key.modifiers.contains(KeyModifiers::SUPER)
+            && key.modifiers.contains(KeyModifiers::SHIFT))
 }
 
 fn is_copy_number_shortcut(key: KeyEvent) -> bool {
     matches!(key.code, KeyCode::Char('>'))
-        || (matches!(key.code, KeyCode::Char('.')) && key.modifiers.contains(KeyModifiers::SHIFT))
-        || (matches!(key.code, KeyCode::Char('.')) && key.modifiers.contains(KeyModifiers::SUPER))
+        || (matches!(key.code, KeyCode::Char('.'))
+            && key.modifiers.contains(KeyModifiers::SUPER)
+            && key.modifiers.contains(KeyModifiers::SHIFT))
 }
 
 fn draw(frame: &mut Frame, app: &mut App) {
@@ -1465,7 +1483,7 @@ fn cursor_for_multiline(text: &str) -> (usize, usize) {
     (line, col)
 }
 
-fn fetch_items(search_query: &str) -> Result<Vec<GithubItem>> {
+fn fetch_items(search_query: &str, force_refresh: bool) -> Result<Vec<GithubItem>> {
     let graphql = r#"
 query($searchQuery: String!, $first: Int!) {
   search(query: $searchQuery, type: ISSUE, first: $first) {
@@ -1503,8 +1521,12 @@ query($searchQuery: String!, $first: Int!) {
 }
 "#;
 
-    let output = Command::new("gh")
-        .arg("api")
+    let mut command = Command::new("gh");
+    command.arg("api");
+    if force_refresh {
+        command.arg("--cache").arg("0s");
+    }
+    let output = command
         .arg("graphql")
         .arg("-f")
         .arg(format!("query={graphql}"))

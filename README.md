@@ -52,6 +52,7 @@ cargo run --release
 - `a`: organization フィルタ編集
 - `s`: `Open -> Closed -> All` を切替
 - `r`: 再取得
+- `Shift+R`: キャッシュを使わず再取得
 - `Enter` または `o`: ブラウザで開く
 - `PageUp` / `PageDown`: プレビューをスクロール
 - `J` / `K`: プレビューを少しだけスクロール
